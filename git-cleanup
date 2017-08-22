@@ -1,0 +1,290 @@
+#!/usr/bin/env sh
+#
+# git-cleanup -- Easy cleanup of branches that are already merged
+#
+# To report bugs, request features, or contribute:
+# https://github.com/git-scripts/library
+#
+# Copyright 2017 @bddenhartog
+#
+# Permission is hereby granted, free of charge, to any person obtaining a copy
+# of this software and associated documentation files (the "Software"), to deal
+# in the Software without restriction, including without limitation the rights
+# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+# copies of the Software, and to permit persons to whom the Software is furnished
+# to do so, subject to the following conditions:
+#
+# The above copyright notice and this permission notice shall be included in all
+# copies or substantial portions of the Software.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+# SOFTWARE.
+
+
+usage() {
+    bold=$(tput bold)
+    italic=$(tput sitm)
+    reset=$(tput sgr0)
+
+    echo
+    echo "${bold}USAGE${reset}"
+    echo "    git cleanup [help] [OPTIONS] BRANCH_NAME"
+    echo
+    echo "${bold}ARGUMENTS${reset}"
+    echo "    help"
+    echo "        Displays this message. This must be the first argument passed"
+    echo "        to git-cleanup, e.g. 'git cleanup help'"
+    echo
+    echo "    BRANCH_NAME"
+    echo "        The branch to check against. Defaults to the branch currently checked out."
+    echo
+    echo "${bold}OPTIONS${reset}"
+    echo "    --debug"
+    echo "        Print debugging information"
+    echo
+    echo "    -c, --confirm"
+    echo "        Ask for confirmation before deleting each merged branch."
+    echo
+    echo "    -u REMOTE, --update-remote REMOTE"
+    echo "        Also delete the branch on the specified remote."
+    echo
+    echo "${bold}INFORMATION${reset}"
+    echo "    git-cleanup provides a simple interface for removing merged and deleted"
+    echo "    refs from both local and remote repositories. By default, git-cleanup will"
+    echo "    never remove a ref if any of the following conditions are met:"
+    echo "        - the ref name is 'master'"
+    echo "        - the ref name exists under a 'git-cleanup.keep' entry in a .gitconfig"
+    echo "          file at the system, user, or local scope."
+}
+
+
+log() {
+    prefix="git-cleanup"
+    type="$1"
+    shift
+
+    case "$type" in
+        info)
+            echo "${prefix}: info: $*"
+            ;;
+        warn)
+            echo "${prefix}: warning: $*"
+            ;;
+        error)
+            ERROR_COUNT=$(($ERROR_COUNT+1))
+            echo "${prefix}: ERROR: $*"
+            ;;
+        fatal)
+            ERROR_COUNT=$(($ERROR_COUNT+1))
+            echo "${prefix}: FATAL: $*" 
+            abort
+            ;;
+        debug)  [ "$DEBUG_MODE" -eq 1 ] && echo "${prefix}: debug: $*" ;;
+    esac
+}
+
+
+checkPlural() {
+    if [ "$2" -gt 1 ] || [ "$2" -eq 0 ]; then
+        echo "${1}s"
+    else
+        echo "$1"
+    fi
+}
+
+
+abort() {
+    errorString=$(checkPlural "error" "$ERROR_COUNT")
+    errorString="$ERROR_COUNT $errorString"
+    echo
+    echo "Encountered $errorString."
+    echo
+    if [ ! "$DEBUG_MODE" -eq 1 ]; then
+        echo "Try re-running the same command with the '--debug' option for "
+        echo "more information."
+        echo
+    fi
+    echo "If you think you may have found a bug, please open an issue:"
+    echo "https://github.com/bddenhartog/git-scripts/issues"
+    exit 1
+}
+
+
+check_errors() {
+    if [ $ERROR_COUNT -gt 0 ]; then
+        abort
+    fi
+}
+
+
+contains() {
+    test "${1#*$2}" = "$1"
+}
+
+
+# Display usage and exit if one of the help
+# commands/flags is passed as the first argument.
+case "$1" in
+    -h|--help|help)
+        usage
+        exit 0
+        ;;
+esac
+
+
+# Exit if a `git` command doesn't exist in the user's PATH or
+# if we're not in a git repository. This is useful to keep
+# in case the script is ran directly, instead of through the git CLI.
+if  ! command -v git > /dev/null 2>&1; then
+    log fatal "command 'git' not found"
+elif ! command git rev-parse --git-dir > /dev/null 2>&1; then
+    log fatal "not a git repository (or any of the parent directories): .git"
+fi
+
+# Initialize debug mode
+# This is set outside of the section where we parse arguments so that
+# all debug messages can be shown, instead of relying on the user passing
+# the flag as the first flag/option
+DEBUG_MODE=0
+[ "${*#*--debug}" != "$*" ] && DEBUG_MODE=1
+
+
+
+# Initialize other variables
+ERROR_COUNT=0
+ASK_CONFIRM=0
+REMOTE_NAME="origin"
+BRANCH_TO_CLEANUP=""
+
+# Parse flags and arguments
+while [ "$#" -gt 0 ]; do
+    case "$1" in
+        --debug) ;;
+        -c|--confirm)
+            ASK_CONFIRM=1
+            log debug "ASK_CONFIRM toggled ON"
+            ;;
+        -u|--update-remote)
+            REMOTE_NAME="$2"
+            log debug "REMOTE_NAME set to '$REMOTE_NAME'"
+            if [ -z "$REMOTE_NAME" ] || [ "${REMOTE_NAME%${REMOTE_NAME#?}}" = '-' ]; then
+                log error "Option '$1' requires the name of a remote as an argument."
+            elif ! command git ls-remote "$REMOTE_NAME" > /dev/null 2>&1; then
+                log error "Remote '$REMOTE_NAME' is invalid, or you do not have the correct access rights."
+            fi
+            shift 2
+            ;;
+        -*)
+            log error "Unknown option '$1'"
+            ;;
+        *)
+            if [ -n "$ARGUMENTS" ]; then
+                ARGUMENTS="${ARGUMENTS}?${1}"
+            else
+                ARGUMENTS="${1}"
+            fi
+            log debug "argument added: '$1'"
+            ;;
+    esac
+    shift
+done
+
+
+log debug "DEBUG_MODE: $DEBUG_MODE"
+log debug "ERROR_COUNT: $ERROR_COUNT"
+log debug "ASK_CONFIRM: $ASK_CONFIRM"
+log debug "REMOTE_NAME: $REMOTE_NAME"
+log debug "BRANCH_TO_CLEANUP: $BRANCH_TO_CLEANUP"
+log debug "ARGUMENTS: $ARGUMENTS"
+
+
+# Grab the base branch from the arguments list
+# Also ensures only one argument is passed
+ARGS_COUNT=0
+ORIGINAL_IFS="$IFS"
+IFS="?"
+for arg in $ARGUMENTS; do
+    ARGS_COUNT=$(($ARGS_COUNT+1))
+    if [ "$ARGS_COUNT" -gt 2 ]; then
+        log error "cannot exceed maximum of one argument"
+    fi
+
+    if [ -z "$BRANCH_TO_CLEANUP" ]; then
+        BRANCH_TO_CLEANUP="$arg"
+        log debug "BRANCH_TO_CLEANUP set to '$arg'"
+    fi
+done
+IFS="$ORIGINAL_IFS"
+
+# Check for errors after parsing flags and arguments
+check_errors
+
+
+# fail if we can't check out the branch (if specified)
+if [ -n "$BRANCH_TO_CLEANUP" ]; then
+    log debug "moving to ref '$BRANCH_TO_CLEANUP'"
+    
+    if ! command git checkout "$BRANCH_TO_CLEANUP" > /dev/null 2>&1; then
+        log fatal "pathspec '$BRANCH_TO_CLEANUP' did not match any file(s) known to git."
+    fi
+fi
+
+
+# fail if we're umable to pull (fetch/merge)
+log info "updating refs..."
+if ! command git pull --all --rebase --prune > /dev/null 2>&1; then
+    log fatal "unable to pull changes from remote."
+fi
+
+
+# try updating submodules, if found
+if [ -f '.gitmodules' ]; then
+    log debug "found '.gitmodules'"
+    log info "updating submodules..."
+    if ! command git submodule update --init --recursive > /dev/null 2>&1; then
+        log fatal "unable to update submodules."
+    fi
+fi
+
+
+filterString="^\*|master"
+for branch in $(git config --get-all 'git-cleanup.keep'); do
+    if ! contains "${filterString#*$branch}" "$baseBranches"; then
+        log debug "filter found: 'git-cleanup.keep = $branch'"
+        filterString="$filterString|$branch"
+    else
+        log warn "duplicate filter found: 'git-cleanup.keep = $branch'"
+    fi
+done
+log debug "filterString: $filterString"
+
+
+for branch in $(git branch --merged | egrep -v "($filterString)"); do
+    if [ $DEBUG_MODE -eq 1 ]; then
+        log debug "exec: 'git branch --delete $branch'"
+        continue
+    fi
+
+    if [ ! $ASK_CONFIRM -eq 1 ]; then
+        git branch --delete "$branch"
+    else
+        printf "git-cleanup: Delete merged ref '$branch'? (y/N): "
+        read DELETE_CONFIRMED
+        printf "\n"
+
+        if [ "$DELETE_CONFIRMED" = "y" ]; then
+            if command git branch --delete "$branch"; then
+                log info "deleted ref '$branch' successfully"
+            else
+                log error "unable to delete ref '$branch'"
+            fi
+        else
+            log info "skipped ref '$branch'"
+        fi
+    fi
+done
