@@ -123,7 +123,7 @@ check_errors() {
 
 
 contains() {
-    test "${1#*$2}" = "$1"
+    test "${1#*$2}" != "$1"
 }
 
 
@@ -237,7 +237,7 @@ fi
 
 # fail if we're umable to pull (fetch/merge)
 log info "updating refs..."
-if ! command git pull --all --rebase --prune > /dev/null 2>&1; then
+if ! command git pull --all --prune > /dev/null 2>&1; then
     log fatal "unable to pull changes from remote."
 fi
 
@@ -254,7 +254,8 @@ fi
 
 filterString="^\*|master"
 for branch in $(git config --get-all 'git-cleanup.keep'); do
-    if ! contains "${filterString#*$branch}" "$baseBranches"; then
+    branch=$(sed -e "s/^\('\|\"\)//" -e "s/\('\|\"\)$//" <<< "$branch")
+    if ! contains "$filterString" "$branch"; then
         log debug "filter found: 'git-cleanup.keep = $branch'"
         filterString="$filterString|$branch"
     else
