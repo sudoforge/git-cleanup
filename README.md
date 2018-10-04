@@ -2,13 +2,29 @@
 
 `git-cleanup` simplifies the process of removing merged and deleted branches.
 
-# Installation
-Place the `git-cleanup` executable somewhere in your `PATH`. It will then be
-available through `git cleanup`.
+## Installation
 
-> **PRO TIP**
-> Run `git cleanup help` after installation to confirm everything works!
+### Arch Linux
 
+* [git-cleanup][aurpkg]
+
+[aurpkg]: https://aur.archlinux.org/packages/git-cleanup
+
+### Build from source
+
+Obtain the source by cloning [this repository][repo-uri] or by downloading the
+tarball of a [release][repo-releases]. Then run `make install` from the source
+root.
+
+```
+$ git clone https://github.com/sudoforge/git-cleanup.git
+$ cd git-cleanup
+$ git checkout $(git describe --tags $(git rev-list --tags --max-count=1))
+$ [sudo] make install
+```
+
+[repo-uri]: https://github.com/sudoforge/git-cleanup.git
+[repo-releases]: https://github.com/sudoforge/git-cleanup/releases
 
 # USAGE
 
