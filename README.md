@@ -10,21 +10,39 @@
 
 [aurpkg]: https://aur.archlinux.org/packages/git-cleanup
 
+For other distributions, see below.
+
 ### Build from source
 
-Obtain the source by cloning [this repository][repo-uri] or by downloading the
-tarball of a [release][repo-releases]. Then run `make install` from the source
-root.
+Obtain the source by cloning [this repository][gh/sudoforge/git-cleanup] or
+by downloading the tarball of a [release][gh/sudoforge/git-cleanup/releases].
+Then run `make install` from the source root.
 
 ```
 $ git clone https://github.com/sudoforge/git-cleanup.git
 $ cd git-cleanup
-$ git checkout $(git describe --tags $(git rev-list --tags --max-count=1))
+```
+
+#### Linux
+
+```
 $ [sudo] make install
 ```
 
-[repo-uri]: https://github.com/sudoforge/git-cleanup.git
-[repo-releases]: https://github.com/sudoforge/git-cleanup/releases
+
+#### BSD (and derivatives like OSX)
+
+```
+$ PREFIX=/usr/local make install
+```
+
+#### Other
+
+As you can see from above, the standard `PREFIX= make install` pattern is
+supported. Plop it anywhere in your `PATH`!
+
+[gh/sudoforge/git-cleanup]: https://github.com/sudoforge/git-cleanup.git
+[gh/sudoforge/git-cleanup/releases]: https://github.com/sudoforge/git-cleanup/releases
 
 # USAGE
 
